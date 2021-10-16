@@ -1,0 +1,220 @@
+name: Build L-SMASH Works
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+
+  aviutl-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        author: [Mr-Ojii]
+        config: 
+          - { cpu: i686, arch: x86 , vpxtarget: x86-win32-gcc}
+          - { cpu: x86_64, arch: x86_64, vpxtarget: x86_64-win64-gcc}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+      
+    - name: Install depend lib
+      run: sudo apt install nasm mingw-w64 meson ninja-build pkg-config
+      
+    - name: Create symbolic link
+      run: sudo ln -s /usr/bin/pkg-config /usr/bin/${{ matrix.config.cpu }}-w64-mingw32-pkg-config
+      
+    - name: Install zlib
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/madler/zlib.git
+        cd zlib
+        CROSS_PREFIX=${{ matrix.config.cpu }}-w64-mingw32- ./configure --static
+        make
+        sudo make install
+        
+    - name: Install dav1d
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://code.videolan.org/videolan/dav1d.git
+        cd dav1d
+        git checkout refs/tags/0.9.2
+        mkdir build && cd build
+        meson --cross-file=../package/crossfiles/${{ matrix.config.cpu }}-w64-mingw32.meson --buildtype release --default-library=static ..
+        ninja
+        sudo ninja install
+    
+    - name: Install libvpx
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/webmproject/libvpx.git --depth 1
+        mkdir libvpx/builds && cd libvpx/builds
+        CROSS=${{ matrix.config.cpu }}-w64-mingw32- ../configure --target=${{ matrix.config.vpxtarget }} --enable-vp9_highbitdepth --disable-docs --disable-tools --disable-examples --disable-webm_io --disable-vp8-encoder --disable-vp9-encoder
+        make
+        sudo make install
+        
+    - name: Install nv-codec-headers
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/FFmpeg/nv-codec-headers.git --depth 1
+        cd nv-codec-headers
+        sudo make install
+        
+    - name: Install mfx_dispatch
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/lu-zero/mfx_dispatch.git
+        cd mfx_dispatch
+        git checkout refs/tags/1.35
+        autoreconf -i
+        ./configure --host=${{ matrix.config.cpu }}-w64-mingw32
+        make -j$(nproc)
+        sudo make install
+      
+    - name: Install FFmpeg
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/FFmpeg/FFmpeg.git -b release/4.4 --depth 1
+        cd FFmpeg
+        ./configure --enable-version3 --disable-decoder=vp8 --disable-decoder=vp9 --enable-avresample --disable-encoders --disable-avisynth --disable-doc --disable-network --disable-programs --disable-outdevs --disable-indevs --enable-avcodec --enable-avformat --enable-swresample --enable-swscale --disable-avfilter --disable-debug --extra-libs="-lpthread" --cross-prefix=${{ matrix.config.cpu }}-w64-mingw32- --cpu=${{ matrix.config.cpu }} --target-os=mingw32 --arch=${{ matrix.config.arch }} --enable-libdav1d --enable-libvpx --enable-libmfx
+        make -j2
+        sudo make install -j2
+        
+    - name: Install L-SMASH
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/l-smash/l-smash.git
+        cd l-smash
+        ./configure --cross-prefix=${{ matrix.config.cpu }}-w64-mingw32-
+        make lib -j2
+        sudo make install-lib -j2
+        
+    - name: Build L-SMASH Works
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/${{ matrix.author }}/L-SMASH-Works.git -b feature_pipe
+        cd L-SMASH-Works/AviUtl
+        ./configure --cross-prefix=${{ matrix.config.cpu }}-w64-mingw32- --extra-ldflags="-static-libgcc -static-libstdc++ -static" --extra-libs="-lpthread"
+        make -j2
+    - name: Set workflow REV_LIST_COUNT
+      id: workflow-rev
+      run: |
+        cd ${{ github.workspace }}
+        REVCOUNT=`git rev-list --count HEAD`
+        echo "::set-output name=REV_LIST_COUNT::${REVCOUNT}"
+        SHA=`git rev-parse HEAD`
+        echo "::set-output name=REV_SHA::${SHA}"
+              
+    - name: Set zlib REV_SHA
+      id: zlib-rev
+      run: |
+        cd ${{ github.workspace }}/zlib
+        REVCOUNT=`git rev-list --count HEAD`
+        echo "::set-output name=REV_LIST_COUNT::${REVCOUNT}"
+        SHA=`git rev-parse HEAD`
+        echo "::set-output name=REV_SHA::${SHA}"
+        
+    - name: Set libvpx REV_SHA
+      id: libvpx-rev
+      run: |
+        cd ${{ github.workspace }}/libvpx
+        REVCOUNT=`git rev-list --count HEAD`
+        echo "::set-output name=REV_LIST_COUNT::${REVCOUNT}"
+        SHA=`git rev-parse HEAD`
+        echo "::set-output name=REV_SHA::${SHA}"
+        
+    - name: Set nv-codec-headers REV_SHA
+      id: nv-codec-headers-rev
+      run: |
+        cd ${{ github.workspace }}/nv-codec-headers
+        REVCOUNT=`git rev-list --count HEAD`
+        echo "::set-output name=REV_LIST_COUNT::${REVCOUNT}"
+        SHA=`git rev-parse HEAD`
+        echo "::set-output name=REV_SHA::${SHA}"
+        
+    - name: Set nv-codec-headers REV_SHA
+      id: mfx_dispatch-rev
+      run: |
+        cd ${{ github.workspace }}/mfx_dispatch
+        REVCOUNT=`git rev-list --count HEAD`
+        echo "::set-output name=REV_LIST_COUNT::${REVCOUNT}"
+        SHA=`git rev-parse HEAD`
+        echo "::set-output name=REV_SHA::${SHA}"
+        
+    - name: Set L-SMASH REV_LIST_COUNT
+      id: l-smash-rev
+      run: |
+        cd ${{ github.workspace }}/l-smash
+        REVCOUNT=`git rev-list --count HEAD`
+        echo "::set-output name=REV_LIST_COUNT::${REVCOUNT}"
+        SHA=`git rev-parse HEAD`
+        echo "::set-output name=REV_SHA::${SHA}"
+        
+    - name: Set L-SMASH Works REV_LIST_COUNT
+      id: l-smash-works-rev
+      run: |
+        cd ${{ github.workspace }}/L-SMASH-Works
+        REVCOUNT=`git rev-list --count HEAD`
+        echo "::set-output name=REV_LIST_COUNT::${REVCOUNT}"
+        SHA=`git rev-parse HEAD`
+        echo "::set-output name=REV_SHA::${SHA}"
+        
+        
+    - name: Create BuildInfo File
+      run: |
+        cd ${{ github.workspace }}/L-SMASH-Works
+        echo "L-SMASH-Works-Auto-Builds r${{ steps.workflow-rev.outputs.REV_LIST_COUNT }}" >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/Mr-Ojii/L-SMASH-Works-Auto-Builds" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo "${{ matrix.author }}/L-SMASH-Works r${{ steps.l-smash-works-rev.outputs.REV_LIST_COUNT }}" >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/${{ matrix.author }}/L-SMASH-Works" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo FFmpeg 4.4 >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/FFmpeg/FFmpeg" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo "L-SMASH r${{ steps.l-smash-rev.outputs.REV_LIST_COUNT }}" >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/l-smash/l-smash" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo "dav1d 0.9.2" >> "AviUtl/About-this-build.txt" 
+        echo "https://github.com/videolan/dav1d" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo "libvpx ${{ steps.libvpx-rev.outputs.REV_SHA }}" >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/webmproject/libvpx" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo "nv-codec-headers ${{ steps.nv-codec-headers-rev.outputs.REV_SHA }}" >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/FFmpeg/nv-codec-headers" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo "mfx_dispatch ${{ steps.mfx_dispatch-rev.outputs.REV_SHA }}" >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/lu-zero/mfx_dispatch" >> "AviUtl/About-this-build.txt"
+        echo "" >> "AviUtl/About-this-build.txt"
+        echo "zlib ${{ steps.zlib-rev.outputs.REV_SHA }}" >> "AviUtl/About-this-build.txt"
+        echo "https://github.com/madler/zlib" >> "AviUtl/About-this-build.txt"
+    
+    - name: Add License Files
+      run: |
+        mkdir ${{ github.workspace }}/L-SMASH-Works/AviUtl/Licenses
+        cd ${{ github.workspace }}/L-SMASH-Works/AviUtl/Licenses
+        cp ${{ github.workspace }}/dav1d/COPYING dav1d.txt
+        cp ${{ github.workspace }}/l-smash/LICENSE L-SMASH.txt
+        cp ${{ github.workspace }}/FFmpeg/COPYING.LGPLv3 FFmpeg.txt
+        cp ${{ github.workspace }}/libvpx/LICENSE libvpx.txt
+        cp ${{ github.workspace }}/mfx_dispatch/LICENSE mfx_dispatch.txt
+        echo "[InternetShortcut]" > zlib.url
+        echo "URL=https://zlib.net/zlib_license.html" >> zlib.url
+        
+    - name: Create archive
+      run: |
+        cd ${{ github.workspace }}/L-SMASH-Works/AviUtl
+        zip L-SMASH-Works_rev${{ steps.l-smash-works-rev.outputs.REV_LIST_COUNT }}_${{ matrix.author }}_${{ matrix.config.cpu }}_AviUtl -r lwcolor.auc lwdumper.auf lwinput.aui lwmuxer.auf LICENSE README README.ja About-this-build.txt Licenses
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: L-SMASH-Works
+        path: ${{ github.workspace }}/L-SMASH-Works/AviUtl/L-SMASH-Works_rev${{ steps.l-smash-works-rev.outputs.REV_LIST_COUNT }}_${{ matrix.author }}_${{ matrix.config.cpu }}_AviUtl.zip

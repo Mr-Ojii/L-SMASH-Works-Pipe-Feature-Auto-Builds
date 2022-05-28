@@ -36,8 +36,8 @@ jobs:
         git clone https://github.com/madler/zlib.git --depth 1
         cd zlib
         CROSS_PREFIX=${{ matrix.config.cpu }}-w64-mingw32- ./configure --static
-        make
-        sudo make install
+        make -j$(nproc)
+        sudo make install -j$(nproc)
         
     - name: Install dav1d
       run: |
@@ -55,15 +55,15 @@ jobs:
         git clone https://github.com/webmproject/libvpx.git --depth 1
         mkdir libvpx/builds && cd libvpx/builds
         CROSS=${{ matrix.config.cpu }}-w64-mingw32- ../configure --target=${{ matrix.config.vpxtarget }} --enable-vp9_highbitdepth --disable-docs --disable-tools --disable-examples --disable-webm_io --disable-vp8-encoder --disable-vp9-encoder
-        make
-        sudo make install
+        make -j$(nproc)
+        sudo make install -j$(nproc)
         
     - name: Install nv-codec-headers
       run: |
         cd ${{ github.workspace }}
         git clone https://github.com/FFmpeg/nv-codec-headers.git --depth 1
         cd nv-codec-headers
-        sudo make install
+        sudo make install -j$(nproc)
         
     - name: Install mfx_dispatch
       run: |
@@ -73,7 +73,7 @@ jobs:
         autoreconf -i
         ./configure --host=${{ matrix.config.cpu }}-w64-mingw32
         make -j$(nproc)
-        sudo make install
+        sudo make install -j$(nproc)
       
     - name: Install FFmpeg
       run: |
@@ -90,8 +90,8 @@ jobs:
         git clone https://github.com/l-smash/l-smash.git
         cd l-smash
         ./configure --cross-prefix=${{ matrix.config.cpu }}-w64-mingw32-
-        make lib -j2
-        sudo make install-lib -j2
+        make lib -j$(nproc)
+        sudo make install-lib -j$(nproc)
         
     - name: Build L-SMASH Works
       run: |
@@ -99,7 +99,7 @@ jobs:
         git clone https://github.com/${{ matrix.author }}/L-SMASH-Works.git -b feature_pipe
         cd L-SMASH-Works/AviUtl
         ./configure --cross-prefix=${{ matrix.config.cpu }}-w64-mingw32- --extra-ldflags="-static-libgcc -static-libstdc++ -static" --extra-libs="-lpthread"
-        make -j2
+        make -j$(nproc)
         
     - name: Set workflow REV_LIST_COUNT
       id: workflow-rev
